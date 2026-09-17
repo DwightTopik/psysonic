@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Clicking **Albums** on the Favorites page now opens All Albums showing only your favourites, so hundreds of them can be browsed as a grid with sorting and filters instead of scrolling one long row.
 
+### Create and manage Navidrome shares inside Psysonic
+
+**By [@cucadmuh](https://github.com/cucadmuh), PR [#1586](https://github.com/Psysonic/psysonic/pull/1586)**
+
+* Enable sharing in the new **Settings -> Integrations -> Navidrome** section, then create public links from supported tracks, albums, artists, playlists, composers and the play queue without opening the server website.
+* The new **ND Shares** page collects links from the selected servers with artwork, type and item counts. Play a share, add it to the queue, inspect its exact contents, copy or open the link, and remove it from the server in one place.
+* Pasting or searching a managed share opens the same preview flow, while mobile and desktop navigation keep the page available wherever sharing is enabled.
+
 ### Finding the switch for the artist photo in fullscreen
 
 **By [@Psychotoxical](https://github.com/Psychotoxical), PR [#1590](https://github.com/Psysonic/psysonic/pull/1590)**
@@ -60,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **By [@cucadmuh](https://github.com/cucadmuh), PR [#1580](https://github.com/Psysonic/psysonic/pull/1580)**
 
 * Tracks in the artist page's **Top** tab now support the same drag-to-queue interaction as the **All** tab, without turning the Play or Preview buttons into drag handles.
+
+### Navidrome share links copy reliably after creation
+
+**By [@cucadmuh](https://github.com/cucadmuh), PR [#1586](https://github.com/Psysonic/psysonic/pull/1586)**
+
+* Creating a Navidrome share no longer loses clipboard access while waiting for the server. Psysonic now uses the desktop clipboard directly and keeps the existing browser fallback for web builds.
 
 ### Lyrics no longer sit on top of the track details in the fullscreen player
 

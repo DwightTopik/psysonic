@@ -180,20 +180,15 @@ function QueuePanelHostOrSolo() {
     suppressNextAutoScrollRef,
   });
 
-  const {
-    serverOptions: queueServerOptions,
-    defaultServerId: defaultQueueServerId,
-    sharePickerOpen,
-    handleCopy: handleCopyQueueShare,
-    shareForServer,
-    closeSharePicker,
-  } = useQueueShare({
+  const queueShare = useQueueShare({
     queueItems,
     servers,
     activeServerId,
     publicShareQueueActive,
     navidromePublicSharePageUrl,
   });
+  const queueServerOptions = queueShare.serverOptions;
+  const defaultQueueServerId = queueShare.defaultServerId;
   const [activePlaylist, setActivePlaylist] = useState<{
     id: string;
     name: string;
@@ -248,7 +243,6 @@ function QueuePanelHostOrSolo() {
     setSaveState('idle');
     setActivePlaylist(null);
     setSaveModalOpen(false);
-    closeSharePicker();
   };
   const handleClear = () => { clearQueue(); finishQueueClear(); };
   const handleClearExceptCurrent = () => { clearQueueExceptCurrent(); finishQueueClear(); };
@@ -369,12 +363,7 @@ function QueuePanelHostOrSolo() {
             shuffleQueue={shuffleQueue}
             handleSave={handleSave}
             handleLoad={handleLoad}
-            handleCopyQueueShare={handleCopyQueueShare}
-            sharePickerOpen={sharePickerOpen}
-            queueServerOptions={queueServerOptions}
-            defaultQueueServerId={defaultQueueServerId}
-            shareForServer={shareForServer}
-            closeSharePicker={closeSharePicker}
+            queueShare={queueShare}
             handleClear={handleClear}
             handleClearExceptCurrent={handleClearExceptCurrent}
             publicShareQueueActive={publicShareQueueActive}
