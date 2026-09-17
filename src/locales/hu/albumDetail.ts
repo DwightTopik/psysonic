@@ -35,6 +35,8 @@ export const albumDetail = {
   trackAlbum: 'Album',
   trackArtist: 'Előadó',
   trackGenre: 'Műfaj',
+  trackGenres: 'Műfajok',
+  trackMood: 'Hangulat',
   trackPlayCount: 'Lejátszások',
   trackLastPlayed: 'Utoljára játszva',
   trackBpm: 'BPM',

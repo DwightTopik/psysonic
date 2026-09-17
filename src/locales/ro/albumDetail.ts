@@ -35,6 +35,8 @@ export const albumDetail = {
   trackAlbum: 'Album',
   trackArtist: 'Artist',
   trackGenre: 'Gen',
+  trackGenres: 'Genuri',
+  trackMood: 'Dispoziție',
   trackPlayCount: 'Redări',
   trackLastPlayed: 'Ultima redare',
   trackBpm: 'BPM',

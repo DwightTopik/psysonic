@@ -35,6 +35,8 @@ export const albumDetail = {
   trackAlbum: 'Албум',
   trackArtist: 'Изпълнител',
   trackGenre: 'Жанр',
+  trackGenres: 'Жанрове',
+  trackMood: 'Настроение',
   trackPlayCount: 'Изпълнения',
   trackLastPlayed: 'Последно пуснато',
   trackBpm: 'BPM',
