@@ -155,6 +155,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * The Psysonic logo on the login screen could be picked up and dragged away like a loose image. It now stays where it is.
 * In **Settings → Offline & Cache → Cover art cache**, a server listed by its bare address or as `user@server` could run into the column next to it. Long names now wrap inside their own column.
 
+### Favourite artists and analysed BPM appear wherever you browse
+
+**By [@cucadmuh](https://github.com/cucadmuh), PR [#1605](https://github.com/Psysonic/psysonic/pull/1605)**, closes [#1582](https://github.com/Psysonic/psysonic/issues/1582)
+
+* The favourite filter on **Artists** now finds artists saved through any credit, instead of showing no results. The Favorites page follows the active server group and updates as soon as a favourite is changed.
+* Tracklists now use an analysed BPM when the file has no BPM tag, so Favorites and other lists agree with Song Info.
+
 ### Album covers from Apple Music and Last.fm no longer replace your own
 
 **By [@Psychotoxical](https://github.com/Psychotoxical), PR [#1608](https://github.com/Psysonic/psysonic/pull/1608)**
