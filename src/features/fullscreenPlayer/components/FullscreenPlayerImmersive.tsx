@@ -1,6 +1,7 @@
 import { queueSongStar, playbackCoverArtForAlbum, usePlayerStore, usePlaybackLibraryNavigate, TrackArtistLinks, ScrobbleActionButton } from '@/features/playback';
 import { usePlaybackCoverArt } from '@/cover/usePlaybackCoverArt';
 import { useAlbumCoverRef } from '@/cover/useLibraryCoverRef';
+import { coverArtRef, resolvePlaybackCoverScope } from '@/cover/ref';
 import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import {
   SkipBack, SkipForward,
@@ -62,6 +63,12 @@ export default function FullscreenPlayer({ onClose }: FullscreenPlayerProps) {
   // reloads/flickers the cover on every song advance (same fix as the Minimal player).
   const playbackCoverRef =
     useAlbumCoverRef(currentTrack?.albumId, undefined, undefined, { libraryResolve: false }) ?? undefined;
+  const originalCoverRef = useMemo(() => {
+    const trackCoverArtId = currentTrack?.coverArt?.trim();
+    if (!trackCoverArtId) return playbackCoverRef;
+    if (playbackCoverRef) return { ...playbackCoverRef, fetchCoverArtId: trackCoverArtId };
+    return coverArtRef(trackCoverArtId, resolvePlaybackCoverScope());
+  }, [currentTrack?.coverArt, playbackCoverRef]);
 
   const artCover = usePlaybackCoverArt(playbackCoverRef, 300, {
     ensureOpts: {
@@ -203,7 +210,12 @@ export default function FullscreenPlayer({ onClose }: FullscreenPlayerProps) {
 
         {/* Album art */}
         <div className="fs-art-wrap">
-          <FsArt fetchUrl={artUrl} cacheKey={artKey} />
+          <FsArt
+            coverRef={originalCoverRef}
+            directCoverArtUrl={directCover}
+            fetchUrl={artUrl}
+            cacheKey={artKey}
+          />
         </div>
 
         {/* Track title — massive statement */}
