@@ -1,7 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Headphones, Heart, MicVocal, Music, Star } from 'lucide-react';
 import { CoverArtImage } from '@/cover/CoverArtImage';
+import { OriginalCoverArtImage } from '@/cover/OriginalCoverArtImage';
+import { coverArtRef, resolvePlaybackCoverScope } from '@/cover/ref';
 import type { CoverArtRef } from '@/cover/types';
 import type { ArtistStats, TrackStats } from '@/music-network';
 import type { SubsonicOpenArtistRef } from '@/lib/api/subsonicTypes';
@@ -56,6 +58,13 @@ const Hero = memo(function Hero({ track, artistRefs, genre, playCount, userRatin
   const networkIcon = useEnrichmentPrimaryIcon();
   const rating = userRatingOverride ?? track.userRating;
   const resolvedStreamFormat = usePlayerStore(s => s.resolvedStreamFormat);
+  const currentTrackCoverArt = usePlayerStore(s => s.currentTrack?.coverArt);
+  const originalCoverRef = useMemo(() => {
+    const trackCoverArtId = currentTrackCoverArt?.trim();
+    if (!trackCoverArtId) return coverRef;
+    if (coverRef) return { ...coverRef, fetchCoverArtId: trackCoverArtId };
+    return coverArtRef(trackCoverArtId, resolvePlaybackCoverScope());
+  }, [coverRef, currentTrackCoverArt]);
   const fmt = effectiveAudioFormat(track, resolvedStreamFormat);
   const transcodedTooltip = fmt.transcoded
     ? t('queue.streamTranscoded', {
@@ -71,18 +80,25 @@ const Hero = memo(function Hero({ track, artistRefs, genre, playCount, userRatin
         {directCoverArtUrl ? (
           <img className="np-cover" src={directCoverArtUrl} alt="" />
         ) : coverRef ? (
-          <CoverArtImage
+          <OriginalCoverArtImage
             className="np-cover"
-            coverRef={coverRef}
-            displayCssPx={280}
-            surface="sparse"
-            ensurePriority="high"
-            ensureOpts={{
-              artistName: track.artist,
-              albumTitle: track.album,
-              allowExternalAlbum: true,
-            }}
+            coverRef={originalCoverRef}
             alt=""
+            fallback={(
+              <CoverArtImage
+                className="np-cover"
+                coverRef={coverRef}
+                displayCssPx={280}
+                surface="sparse"
+                ensurePriority="high"
+                ensureOpts={{
+                  artistName: track.artist,
+                  albumTitle: track.album,
+                  allowExternalAlbum: true,
+                }}
+                alt=""
+              />
+            )}
           />
         ) : (
           <div className="np-cover np-cover-fallback"><Music size={64} /></div>

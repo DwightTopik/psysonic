@@ -8,6 +8,8 @@ import { ScrobbleActionButton, usePlayerStore } from '@/features/playback';
 import { queueSongStar, queueSongRating } from '@/features/playback/store/pendingStarSync';
 import { TrackArtistLinks, usePlaybackLibraryNavigate } from '@/features/playback';
 import { useAlbumCoverRef } from '@/cover/useLibraryCoverRef';
+import { OriginalCoverArtImage } from '@/cover/OriginalCoverArtImage';
+import { coverArtRef, resolvePlaybackCoverScope } from '@/cover/ref';
 import { usePlaybackCoverArt } from '@/cover/usePlaybackCoverArt';
 import { useCachedUrl } from '@/ui/CachedImage';
 import { useFsArtistBackdrop } from '@/features/fullscreenPlayer/hooks/useFsArtistBackdrop';
@@ -92,6 +94,12 @@ export default function FullscreenPlayerStatic({ onClose }: Props) {
   // `usePlaybackCoverArt` still re-scopes it to the playback server.
   const playbackCoverRef =
     useAlbumCoverRef(currentTrack?.albumId, undefined, undefined, { libraryResolve: false }) ?? undefined;
+  const originalCoverRef = useMemo(() => {
+    const trackCoverArtId = currentTrack?.coverArt?.trim();
+    if (!trackCoverArtId) return playbackCoverRef;
+    if (playbackCoverRef) return { ...playbackCoverRef, fetchCoverArtId: trackCoverArtId };
+    return coverArtRef(trackCoverArtId, resolvePlaybackCoverScope());
+  }, [currentTrack?.coverArt, playbackCoverRef]);
   // One high-res cover (cucadmuh's fullRes 2000px path) feeds the foreground
   // thumbnail — crisp instead of the old low-res tier. It is no longer a
   // background source (see below).
@@ -161,8 +169,30 @@ export default function FullscreenPlayerStatic({ onClose }: Props) {
       data-idle={isIdle}
       onMouseMove={handleMouseMove}
     >
-      {/* Sharp background — no blur; eases in once its pixels are loaded. */}
-      <FsBackground key={bgUrl} url={bgUrl} />
+      {/* Original per-track art stays byte-for-byte animated. The artist backdrop
+          remains the load-failure fallback; the existing scrim/vignette sit above. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          filter: 'blur(18px) brightness(0.55)',
+          transform: 'scale(1.06)',
+        }}
+      >
+        {currentTrack?.directCoverArtUrl ? (
+          <FsBackground key={currentTrack.directCoverArtUrl} url={currentTrack.directCoverArtUrl} />
+        ) : originalCoverRef ? (
+          <OriginalCoverArtImage
+            className="fsp-bg is-loaded"
+            coverRef={originalCoverRef}
+            alt=""
+            fallback={<FsBackground key={bgUrl} url={bgUrl} />}
+          />
+        ) : (
+          <FsBackground key={bgUrl} url={bgUrl} />
+        )}
+      </div>
       <div className="fsp-scrim" aria-hidden="true" />
       <div className="fsp-vignette" aria-hidden="true" />
 
@@ -186,9 +216,22 @@ export default function FullscreenPlayerStatic({ onClose }: Props) {
         <div className="fsp-info-row">
           {/* Big cover — bottom-aligned with the text, top pokes above the bar */}
           <div className="fsp-cover">
-            {thumbUrl
-              ? <img className="fsp-cover-img" src={thumbUrl} alt="" draggable={false} />
-              : <div className="fsp-cover-img fsp-cover-img--empty" />}
+            {currentTrack?.directCoverArtUrl ? (
+              <img className="fsp-cover-img" src={currentTrack.directCoverArtUrl} alt="" draggable={false} />
+            ) : originalCoverRef ? (
+              <OriginalCoverArtImage
+                className="fsp-cover-img"
+                coverRef={originalCoverRef}
+                alt=""
+                fallback={coverUrl
+                  ? <img className="fsp-cover-img" src={coverUrl} alt="" draggable={false} />
+                  : <div className="fsp-cover-img fsp-cover-img--empty" />}
+              />
+            ) : thumbUrl ? (
+              <img className="fsp-cover-img" src={thumbUrl} alt="" draggable={false} />
+            ) : (
+              <div className="fsp-cover-img fsp-cover-img--empty" />
+            )}
           </div>
           <div className="fsp-info-text">
             <p className="fsp-title">{currentTrack?.title ?? '—'}</p>
