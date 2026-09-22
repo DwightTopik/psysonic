@@ -8,7 +8,8 @@ import type { PlayerState } from '@/features/playback/store/playerStoreTypes';
 import type { RadioMetadata } from '@/features/radio';
 import type { PreviewingTrack } from '@/features/playback/store/previewStore';
 import { CoverArtImage } from '@/cover/CoverArtImage';
-import { radioCoverRef } from '@/cover/ref';
+import { OriginalCoverArtImage } from '@/cover/OriginalCoverArtImage';
+import { coverArtRef, radioCoverRef, resolvePlaybackCoverScope } from '@/cover/ref';
 import { useAlbumCoverRef } from '@/cover/useLibraryCoverRef';
 import { usePlaybackTrackCoverRef } from '@/cover/useLibraryCoverRef';
 import MarqueeText from '@/ui/MarqueeText';
@@ -88,6 +89,12 @@ export function PlayerTrackInfo({
     showPreviewMeta ? { libraryResolve: false } : undefined,
   );
   const activeCoverRef = showPreviewMeta ? previewCoverRef : playbackCoverRef;
+  const originalTrackCoverRef = useMemo(() => {
+    const trackCoverArtId = currentTrack?.coverArt?.trim();
+    if (!trackCoverArtId) return playbackCoverRef;
+    if (playbackCoverRef) return { ...playbackCoverRef, fetchCoverArtId: trackCoverArtId };
+    return coverArtRef(trackCoverArtId, resolvePlaybackCoverScope());
+  }, [currentTrack?.coverArt, playbackCoverRef]);
   const directCoverUrl = !isRadio && !showPreviewMeta ? currentTrack?.directCoverArtUrl : undefined;
   const layoutItems = usePlayerBarLayoutStore(s => s.items);
   const isLayoutVisible = (id: PlayerBarLayoutItemId) =>
@@ -128,15 +135,34 @@ export function PlayerTrackInfo({
             alt={currentTrack?.album ? `${currentTrack.album} Cover` : ''}
           />
         ) : !isRadio && activeCoverRef ? (
-          <CoverArtImage
-            className="player-album-art"
-            coverRef={activeCoverRef}
-            displayCssPx={128}
-            surface="sparse"
-            ensurePriority="high"
-            ensureOpts={coverEnsureOpts}
-            alt={showPreviewMeta ? `${previewingTrack!.title} Cover` : `${currentTrack?.album ?? ''} Cover`}
-          />
+          showPreviewMeta ? (
+            <CoverArtImage
+              className="player-album-art"
+              coverRef={activeCoverRef}
+              displayCssPx={128}
+              surface="sparse"
+              ensurePriority="high"
+              ensureOpts={coverEnsureOpts}
+              alt={`${previewingTrack!.title} Cover`}
+            />
+          ) : (
+            <OriginalCoverArtImage
+              className="player-album-art"
+              coverRef={originalTrackCoverRef}
+              alt={`${currentTrack?.album ?? ''} Cover`}
+              fallback={(
+                <CoverArtImage
+                  className="player-album-art"
+                  coverRef={activeCoverRef}
+                  displayCssPx={128}
+                  surface="sparse"
+                  ensurePriority="high"
+                  ensureOpts={coverEnsureOpts}
+                  alt={`${currentTrack?.album ?? ''} Cover`}
+                />
+              )}
+            />
+          )
           ) : (
           <div className="player-album-art-placeholder">
             <Music size={22} />
