@@ -1,10 +1,12 @@
 import { queueSongStar } from '@/features/playback/store/pendingStarSync';
 import { usePlaybackCoverArt } from '@/cover/usePlaybackCoverArt';
 import { usePlaybackTrackCoverRef } from '@/cover/useLibraryCoverRef';
+import { OriginalCoverArtImage } from '@/cover/OriginalCoverArtImage';
+import { coverArtRef, resolvePlaybackCoverScope } from '@/cover/ref';
 import type { Track } from '@/lib/media/trackTypes';
 import { effectiveAudioFormat } from '@/lib/media/streamFormat';
 import { getPlaybackProgressSnapshot, subscribePlaybackProgress } from '@/features/playback/store/playbackProgress';
-import React, { useState, useCallback, useRef, useEffect, useSyncExternalStore, CSSProperties } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import { TrackArtistLinks, usePlaybackLibraryNavigate } from '@/features/playback';
 import { useTranslation } from 'react-i18next';
@@ -244,6 +246,12 @@ export default function MobilePlayerView() {
   const duration = currentTrack?.duration ?? 0;
 
   const playbackCoverRef = usePlaybackTrackCoverRef(currentTrack ?? undefined);
+  const originalCoverRef = useMemo(() => {
+    const trackCoverArtId = currentTrack?.coverArt?.trim();
+    if (!trackCoverArtId) return playbackCoverRef;
+    if (playbackCoverRef) return { ...playbackCoverRef, fetchCoverArtId: trackCoverArtId };
+    return coverArtRef(trackCoverArtId, resolvePlaybackCoverScope());
+  }, [currentTrack?.coverArt, playbackCoverRef]);
   const { src: coverFetchUrl, cacheKey: coverKey } = usePlaybackCoverArt(
     playbackCoverRef,
     800,
@@ -377,8 +385,17 @@ export default function MobilePlayerView() {
 
       {/* Cover Art */}
       <div className="mp-cover-wrap">
-        {displayCover ? (
-          <img src={displayCover} alt="" className="mp-cover" />
+        {directCover ? (
+          <img src={directCover} alt="" className="mp-cover" />
+        ) : originalCoverRef ? (
+          <OriginalCoverArtImage
+            coverRef={originalCoverRef}
+            alt=""
+            className="mp-cover"
+            fallback={resolvedCover
+              ? <img src={resolvedCover} alt="" className="mp-cover" />
+              : <div className="mp-cover mp-cover-fallback"><Music size={64} /></div>}
+          />
         ) : (
           <div className="mp-cover mp-cover-fallback">
             <Music size={64} />
