@@ -161,7 +161,9 @@ pub async fn audio_play(
     // chained_info (avoids a race where it sees current_done + empty chain).
     let gen = {
         let _commit_guard = state.playback_commit_lock.lock().unwrap();
-        state.generation.fetch_add(1, Ordering::SeqCst) + 1
+        let gen = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        state.invalidate_pending_seek();
+        gen
     };
     // Ranged/legacy HTTP paths reset this to false in `select_play_input`.
     state.stream_playback_armed.store(true, Ordering::SeqCst);
@@ -399,6 +401,7 @@ pub async fn audio_play(
     let output_rate = built.output_rate;
     let output_channels = built.output_channels;
     let resolved_format = built.resolved_format;
+    let streaming_seek = built.streaming_seek.clone();
 
     // Store the actual output rate/channels for position calculation.
     state
@@ -568,7 +571,34 @@ pub async fn audio_play(
     // re-seed `samples_played` + `seek_offset` explicitly after the swap (below)
     // so the seekbar and the crossfade-remaining math are content-relative.
     let did_start_seek = if start_secs > 0.05 && source_seekable {
-        source.try_seek(Duration::from_secs_f64(start_secs)).is_ok()
+        let target = Duration::from_secs_f64(start_secs);
+        let prepared = if let Some(handle) = streaming_seek.clone() {
+            match tokio::task::spawn_blocking(move || {
+                handle.prepare_seek(target, Duration::ZERO, Duration::from_millis(700))
+            })
+            .await
+            {
+                Ok(Ok(ticket)) => ticket,
+                Ok(Err(error)) => {
+                    crate::app_deprintln!("[seek] B-head prepare skipped: {error}");
+                    None
+                }
+                Err(error) => {
+                    crate::app_deprintln!("[seek] B-head worker join failed: {error}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        if let Some(ticket) = prepared {
+            let target_reached = ticket.target_error().is_none();
+            source.try_seek(ticket.commit_position()).is_ok() && target_reached
+        } else if streaming_seek.is_none() {
+            source.try_seek(target).is_ok()
+        } else {
+            false
+        }
     } else {
         false
     };
@@ -594,6 +624,7 @@ pub async fn audio_play(
     swap_in_new_sink(
         &state,
         SinkSwapInputs {
+            generation: gen,
             sink,
             duration_secs,
             volume,
@@ -604,6 +635,7 @@ pub async fn audio_play(
             actual_fade_secs,
             outgoing_fade_secs,
             start_paused,
+            streaming_seek,
         },
     );
     drop(stream_attach);
@@ -675,6 +707,8 @@ pub async fn audio_play(
         state.gapless_switch_at.clone(),
         state.current_playback_url.clone(),
         state.stream_playback_armed.clone(),
+        state.pending_seek.clone(),
+        state.source_transition_lock.clone(),
         state.playback_rate.clone(),
     );
 
@@ -883,6 +917,10 @@ pub async fn audio_chain_preload(
     let requested_stream_rate = state.stream_requested_rate.load(Ordering::Relaxed);
     if let Some(br) = blend_rate {
         if super::engine::stream_rate_needs_switch(br, requested_stream_rate) {
+            let _source_transition = state.source_transition_lock.write().await;
+            if !snapshot.is_current(&state) {
+                return Ok(());
+            }
             if let Some(snap) = hi_res_blend::capture_outgoing_blend_snapshot(&state, 0.0, 0.0) {
                 hi_res_blend::detach_current_sink_for_blend_reopen(&state);
                 let dev = state.selected_device.lock().unwrap().clone();

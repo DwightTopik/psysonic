@@ -228,6 +228,7 @@ const CONTRIBUTOR_ENTRIES = [
       'Navidrome share creation, management, preview and playback workflow (PR #1586)',
       'Favorites scoped search and reliable collapsed search entry (PR #1629)',
       'Artist credits — scoped browse and detail support for guest and participant artists (PR #1631)',
+      'Responsive off-thread seeking for streamed lossless audio (PR #1633)',
     ],
   },
   {
@@ -595,6 +596,13 @@ const CONTRIBUTOR_ENTRIES = [
     contributions: [
       'Navidrome song-list filter fix that unblocked native library sync (PR #1514)',
       'Audio CD burning with CD-TEXT on Windows, macOS and Linux (PR #1538)',
+    ],
+  },
+  {
+    github: 'strecke',
+    since: '1.55.0',
+    contributions: [
+      'Seek buffering indicator polish for player and queue cover art (PR #1634)',
     ],
   },
 ] as const;
