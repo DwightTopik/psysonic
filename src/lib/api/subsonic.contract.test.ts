@@ -13,6 +13,8 @@
 import {
   buildCoverArtUrl,
   buildCoverArtUrlForServer,
+  buildOriginalCoverArtUrl,
+  buildOriginalCoverArtUrlForServer,
   buildDownloadUrl,
   buildOriginalStreamUrlForServer,
   buildStreamUrl,
@@ -355,6 +357,25 @@ describe('buildCoverArtUrlForServer', () => {
     expect(url.searchParams.get('size')).toBe('40');
     expect(url.searchParams.get('u')).toBe('bob');
     expect(url.searchParams.get('t')).toBeTruthy();
+  });
+});
+
+describe('original cover-art URL builders', () => {
+  it('omit size while retaining Subsonic authentication', () => {
+    setUpServer({ url: 'https://music.example.com', username: 'alice', password: 'pw' });
+    const activeUrl = new URL(buildOriginalCoverArtUrl('mf-track-1'));
+    const serverUrl = new URL(
+      buildOriginalCoverArtUrlForServer('https://remote.example', 'bob', 'secret', 'mf-track-2'),
+    );
+
+    for (const url of [activeUrl, serverUrl]) {
+      expect(url.pathname).toBe('/rest/getCoverArt.view');
+      expect(url.searchParams.has('size')).toBe(false);
+      expect(url.searchParams.get('t')).toHaveLength(32);
+      expect(url.searchParams.get('s')).toBeTruthy();
+    }
+    expect(activeUrl.searchParams.get('id')).toBe('mf-track-1');
+    expect(serverUrl.searchParams.get('id')).toBe('mf-track-2');
   });
 });
 

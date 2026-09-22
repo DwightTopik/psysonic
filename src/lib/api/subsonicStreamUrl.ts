@@ -7,12 +7,11 @@ import { connectBaseUrlForServer } from '@/lib/server/serverEndpoint';
 import { findServerByIdOrIndexKey } from '@/lib/server/serverLookup';
 import { restBaseFromUrl, SUBSONIC_CLIENT, secureRandomSalt } from '@/lib/api/subsonicClient';
 
-function coverArtQueryParams(username: string, password: string, id: string, size: number): URLSearchParams {
+function coverArtQueryParams(username: string, password: string, id: string, size?: number): URLSearchParams {
   const salt = secureRandomSalt();
   const token = md5(password + salt);
-  return new URLSearchParams({
+  const params = new URLSearchParams({
     id,
-    size: String(size),
     u: username,
     t: token,
     s: salt,
@@ -20,6 +19,8 @@ function coverArtQueryParams(username: string, password: string, id: string, siz
     c: SUBSONIC_CLIENT,
     f: 'json',
   });
+  if (size != null) params.set('size', String(size));
+  return params;
 }
 
 function streamUrlFromProfile(
@@ -118,6 +119,15 @@ export function buildCoverArtUrl(id: string, size = 256): string {
   return `${baseUrl}/rest/getCoverArt.view?${p.toString()}`;
 }
 
+/** Original getCoverArt response bytes; intentionally omits the resize parameter. */
+export function buildOriginalCoverArtUrl(id: string): string {
+  const { getBaseUrl, getActiveServer } = useAuthStore.getState();
+  const server = getActiveServer();
+  const baseUrl = getBaseUrl();
+  const p = coverArtQueryParams(server?.username ?? '', server?.password ?? '', id);
+  return `${baseUrl}/rest/getCoverArt.view?${p.toString()}`;
+}
+
 /** @deprecated Use `buildCoverArtFetchUrl` from `src/cover/fetchUrl` — shim until migration. */
 export function buildCoverArtUrlForServer(
   serverUrl: string,
@@ -127,6 +137,17 @@ export function buildCoverArtUrlForServer(
   size = 256,
 ): string {
   const p = coverArtQueryParams(username, password, id, size);
+  return `${restBaseFromUrl(serverUrl)}/getCoverArt.view?${p.toString()}`;
+}
+
+/** Original getCoverArt response bytes for an explicit server profile. */
+export function buildOriginalCoverArtUrlForServer(
+  serverUrl: string,
+  username: string,
+  password: string,
+  id: string,
+): string {
+  const p = coverArtQueryParams(username, password, id);
   return `${restBaseFromUrl(serverUrl)}/getCoverArt.view?${p.toString()}`;
 }
 

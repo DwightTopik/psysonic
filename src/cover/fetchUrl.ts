@@ -1,6 +1,8 @@
 import {
   buildCoverArtUrl,
   buildCoverArtUrlForServer,
+  buildOriginalCoverArtUrl,
+  buildOriginalCoverArtUrlForServer,
 } from '@/lib/api/subsonicStreamUrl';
 import { getPlaybackServerId } from '@/features/playback/utils/playback/playbackServer';
 import { useAuthStore } from '../store/authStore';
@@ -9,19 +11,30 @@ import type { CoverArtRef, CoverArtTier } from './types';
 
 /** Builds ephemeral getCoverArt URL — NOT a cache key */
 export function buildCoverArtFetchUrl(ref: CoverArtRef, tier: CoverArtTier): string {
+  return buildCoverArtFetchUrlImpl(ref, tier);
+}
+
+/** Builds an ephemeral getCoverArt URL without server-side resizing. */
+export function buildOriginalCoverArtFetchUrl(ref: CoverArtRef): string {
+  return buildCoverArtFetchUrlImpl(ref);
+}
+
+function buildCoverArtFetchUrlImpl(ref: CoverArtRef, tier?: CoverArtTier): string {
   const { fetchCoverArtId, serverScope } = ref;
   if (serverScope.kind === 'server') {
     // Scope.url is the index-stable primary URL (so storage keys keep working
     // across LAN ↔ public). For the actual cover fetch we want the connect
     // endpoint — use connectBaseUrlForServer to pick the cached LAN/public
     // URL, falling back to the primary url when no probe has run yet.
-    return buildCoverArtUrlForServer(
+    const args = [
       connectBaseUrlForServer({ id: serverScope.serverId, url: serverScope.url }),
       serverScope.username,
       serverScope.password,
       fetchCoverArtId,
-      tier,
-    );
+    ] as const;
+    return tier == null
+      ? buildOriginalCoverArtUrlForServer(...args)
+      : buildCoverArtUrlForServer(...args, tier);
   }
   if (serverScope.kind === 'playback') {
     const playbackSid = getPlaybackServerId();
@@ -29,15 +42,19 @@ export function buildCoverArtFetchUrl(ref: CoverArtRef, tier: CoverArtTier): str
     if (playbackSid && activeSid && playbackSid !== activeSid) {
       const server = useAuthStore.getState().servers.find(s => s.id === playbackSid);
       if (server) {
-        return buildCoverArtUrlForServer(
+        const args = [
           connectBaseUrlForServer(server),
           server.username,
           server.password,
           fetchCoverArtId,
-          tier,
-        );
+        ] as const;
+        return tier == null
+          ? buildOriginalCoverArtUrlForServer(...args)
+          : buildCoverArtUrlForServer(...args, tier);
       }
     }
   }
-  return buildCoverArtUrl(fetchCoverArtId, tier);
+  return tier == null
+    ? buildOriginalCoverArtUrl(fetchCoverArtId)
+    : buildCoverArtUrl(fetchCoverArtId, tier);
 }
