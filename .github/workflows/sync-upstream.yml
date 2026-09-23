@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: sync-upstream-animated-covers
@@ -31,6 +32,8 @@ jobs:
 
       - name: Rebase onto upstream main and push safely
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -40,6 +43,21 @@ jobs:
           # Pin the lease before rebasing. The push is attempted only after a
           # complete rebase, and is rejected if the remote branch changed.
           remote_sha="$(git ls-remote --exit-code origin refs/heads/feature/animated-covers | awk '{print $1}')"
+          before_sha="$(git rev-parse HEAD)"
           git rebase upstream/main
+          after_sha="$(git rev-parse HEAD)"
+
+          if [ "$before_sha" = "$after_sha" ]; then
+            echo "No upstream changes; nothing to build."
+            exit 0
+          fi
+
           git push origin HEAD:refs/heads/feature/animated-covers \
             --force-with-lease=refs/heads/feature/animated-covers:"$remote_sha"
+
+          # GITHUB_TOKEN pushes do not emit a second workflow run, so dispatch
+          # the single-build artifact/release pipeline explicitly after push.
+          gh workflow run build-windows.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref feature/animated-covers \
+            -f publish_release=true
