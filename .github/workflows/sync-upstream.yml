@@ -1,0 +1,45 @@
+name: Sync animated covers with upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 03:17 UTC.
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-animated-covers
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out feature branch with full history
+        uses: actions/checkout@v7
+        with:
+          ref: feature/animated-covers
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebase onto upstream main and push safely
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git remote add upstream https://github.com/Psysonic/psysonic.git
+          git fetch --no-tags upstream main
+
+          # Pin the lease before rebasing. The push is attempted only after a
+          # complete rebase, and is rejected if the remote branch changed.
+          remote_sha="$(git ls-remote --exit-code origin refs/heads/feature/animated-covers | awk '{print $1}')"
+          git rebase upstream/main
+          git push origin HEAD:refs/heads/feature/animated-covers \
+            --force-with-lease=refs/heads/feature/animated-covers:"$remote_sha"
