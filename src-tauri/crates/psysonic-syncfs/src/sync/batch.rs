@@ -20,8 +20,8 @@ pub(crate) mod plan;
 mod planner;
 
 pub(crate) use model::{
-    estimate_track_size_bytes, fetch_subsonic_songs, inject_flat_layout, inject_overwrite,
-    inject_playlist_context, inject_target_suffix, subsonic_response_root,
+    estimate_track_size_bytes, fetch_subsonic_song, fetch_subsonic_songs, inject_flat_layout,
+    inject_overwrite, inject_playlist_context, inject_target_suffix, subsonic_response_root,
     track_sync_info_from_subsonic_json,
 };
 pub use model::{
@@ -35,7 +35,7 @@ pub(crate) use plan::{
     normalized_manifest_playlists, normalized_strings, relative_delete_paths,
     validate_active_device_sync_plan_binding, DeviceSyncPlanPlaylist, DeviceSyncPlanRecord,
 };
-pub(crate) use planner::portable_path_identity;
+pub(crate) use planner::{portable_path_identity, DeviceSyncPlannedMove};
 
 pub use filesystem::prune_empty_parents;
 use filesystem::{
@@ -45,8 +45,8 @@ use filesystem::{
 use payload::calculate_sync_payload_impl;
 #[cfg(test)]
 use payload::{
-    device_sync_source_key, device_sync_source_requires_fetch, playlist_collision_source_keys,
-    validate_device_sync_source_owners,
+    departed_song_lookup_ids, device_sync_source_key, device_sync_source_requires_fetch,
+    playlist_collision_source_keys, validate_device_sync_source_owners,
 };
 
 #[tauri::command]
