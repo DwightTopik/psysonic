@@ -3,10 +3,11 @@ use std::path::Path;
 
 use super::payload::{device_sync_source_key, playlist_collision_source_keys};
 use super::{
-    estimate_track_size_bytes, inject_flat_layout, inject_playlist_context,
-    track_sync_info_from_subsonic_json, DeviceSyncLayoutMode, DeviceSyncManifestFile,
-    DeviceSyncManifestPlaylist, DeviceSyncPlannedPlaylist, DeviceSyncPlaylistPathMode,
-    DeviceSyncSourcePayload, SyncDeltaResult,
+    estimate_track_size_bytes, inject_flat_layout, inject_overwrite, inject_playlist_context,
+    inject_target_suffix, track_sync_info_from_subsonic_json, DeviceSyncLayoutMode,
+    DeviceSyncManifestFile, DeviceSyncManifestPlaylist, DeviceSyncPlannedPlaylist,
+    DeviceSyncPlaylistPathMode, DeviceSyncSourceFingerprint, DeviceSyncSourcePayload,
+    DeviceSyncTranscode, SyncDeltaResult,
 };
 use crate::sync::device::{
     build_track_path, planned_path_stays_within, playlist_file_relative_path, read_device_manifest,
@@ -22,6 +23,15 @@ use manifest::{
 };
 use retained::{retained_manifest_files, retained_manifest_playlists};
 
+/// How the device should look: folder layout, playlist references and the
+/// format every file is stored in.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct SyncPlanOptions {
+    pub layout_mode: DeviceSyncLayoutMode,
+    pub playlist_path_mode: DeviceSyncPlaylistPathMode,
+    pub transcode: DeviceSyncTranscode,
+}
+
 #[derive(Clone)]
 pub(super) struct FetchedDeviceSyncSource {
     pub source: DeviceSyncSourcePayload,
@@ -34,6 +44,7 @@ struct DesiredFile {
     relative_path: String,
     source_keys: BTreeSet<String>,
     size_bytes: u64,
+    source: DeviceSyncSourceFingerprint,
     track: serde_json::Value,
     playlist_name: Option<String>,
     playlist_id: Option<String>,
@@ -71,6 +82,71 @@ fn playlist_reference(relative_path: &str, mode: DeviceSyncPlaylistPathMode, fla
     }
 }
 
+/// Leading track number of a self-contained playlist file (`07 - Artist - Title.flac`).
+fn playlist_index_from_path(relative_path: &str) -> Option<u32> {
+    let name = relative_path.rsplit('/').next()?;
+    let digits = name
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>();
+    digits.parse().ok().filter(|index| *index > 0)
+}
+
+/// Proves that a manifest file sits exactly where the planner would have put
+/// its track for one of its recorded sources, using the server's metadata for
+/// that track. A manifest is device data and cannot be trusted to name paths on
+/// its own; this admits only paths the planner itself produces for a real
+/// song, so a tampered manifest still cannot nominate unrelated files.
+fn authenticated_by_server_song(
+    file: &DeviceSyncManifestFile,
+    songs: &HashMap<&str, &serde_json::Value>,
+    sources: &HashMap<String, &DeviceSyncSourcePayload>,
+    collision_sources: &HashSet<String>,
+    layout_mode: DeviceSyncLayoutMode,
+) -> bool {
+    let Some(song) = songs.get(file.track_id.as_str()) else {
+        return false;
+    };
+    let identity = portable_path_identity(&file.relative_path);
+    let target_suffix = file.effective_transcode().target_suffix();
+    file.source_keys.iter().any(|source_key| {
+        let Some(source) = sources.get(source_key) else {
+            return false;
+        };
+        let (playlist_name, playlist_id, playlist_index) = if source.source_type == "playlist"
+            && layout_mode == DeviceSyncLayoutMode::SelfContained
+        {
+            let Some(index) = playlist_index_from_path(&file.relative_path) else {
+                return false;
+            };
+            let playlist_id = source.path_id.as_deref().or_else(|| {
+                collision_sources
+                    .contains(source_key)
+                    .then_some(source.id.as_str())
+            });
+            (
+                Some(source.name.as_deref().unwrap_or("")),
+                playlist_id,
+                Some(index),
+            )
+        } else {
+            (None, None, None)
+        };
+        let mut sync_info = track_sync_info_from_subsonic_json(
+            song,
+            &file.track_id,
+            playlist_name,
+            playlist_id,
+            playlist_index,
+        );
+        sync_info.flat_layout = layout_mode == DeviceSyncLayoutMode::Flat;
+        if let Some(suffix) = target_suffix {
+            sync_info.suffix = suffix.to_string();
+        }
+        portable_path_identity(&portable_track_path(&sync_info)) == identity
+    })
+}
+
 fn physical_key(
     source: &DeviceSyncSourcePayload,
     source_key: &str,
@@ -90,6 +166,7 @@ fn add_file(
     paths: &mut HashMap<String, String>,
     input: DesiredFileInput<'_>,
     flat: bool,
+    transcode: DeviceSyncTranscode,
 ) -> Result<String, String> {
     if let Some(existing) = files.get_mut(&input.key) {
         existing.source_keys.insert(input.source_key.to_string());
@@ -104,6 +181,9 @@ fn add_file(
         input.playlist_index,
     );
     sync_info.flat_layout = flat;
+    if let Some(suffix) = transcode.target_suffix() {
+        sync_info.suffix = suffix.to_string();
+    }
     let relative_path = portable_track_path(&sync_info);
     let path_identity = portable_path_identity(&relative_path);
     if let Some(existing_key) = paths.get(&path_identity) {
@@ -121,7 +201,8 @@ fn add_file(
             track_id: input.track_id.to_string(),
             relative_path: relative_path.clone(),
             source_keys,
-            size_bytes: estimate_track_size_bytes(input.track),
+            size_bytes: estimate_track_size_bytes(input.track, transcode),
+            source: DeviceSyncSourceFingerprint::from_subsonic_json(input.track),
             track: input.track.clone(),
             playlist_name: input.playlist_name.map(str::to_string),
             playlist_id: input.playlist_id.map(str::to_string),
@@ -134,9 +215,13 @@ fn add_file(
 fn build_desired_state(
     fetched: &[FetchedDeviceSyncSource],
     included_source_keys: &HashSet<String>,
-    layout_mode: DeviceSyncLayoutMode,
-    playlist_path_mode: DeviceSyncPlaylistPathMode,
+    options: SyncPlanOptions,
 ) -> Result<DesiredState, String> {
+    let SyncPlanOptions {
+        layout_mode,
+        playlist_path_mode,
+        transcode,
+    } = options;
     let included_sources = fetched
         .iter()
         .filter(|entry| included_source_keys.contains(&device_sync_source_key(&entry.source)))
@@ -171,6 +256,7 @@ fn build_desired_state(
                     playlist_index: None,
                 },
                 flat,
+                transcode,
             )?;
         }
     }
@@ -223,6 +309,7 @@ fn build_desired_state(
                     playlist_index: path_index,
                 },
                 flat,
+                transcode,
             )?;
             let reference = if layout_mode == DeviceSyncLayoutMode::SelfContained {
                 relative_track_path
@@ -233,7 +320,11 @@ fn build_desired_state(
             } else {
                 playlist_reference(&relative_track_path, playlist_path_mode, flat)
             };
-            playlist_tracks.push(track.clone());
+            let mut playlist_track = track.clone();
+            if let Some(suffix) = transcode.target_suffix() {
+                inject_target_suffix(&mut playlist_track, suffix);
+            }
+            playlist_tracks.push(playlist_track);
             references.push(reference);
         }
 
@@ -258,7 +349,10 @@ fn build_desired_state(
     })
 }
 
-fn manifest_files(state: &DesiredState) -> Vec<DeviceSyncManifestFile> {
+fn manifest_files(
+    state: &DesiredState,
+    transcode: DeviceSyncTranscode,
+) -> Vec<DeviceSyncManifestFile> {
     state
         .files
         .values()
@@ -267,8 +361,26 @@ fn manifest_files(state: &DesiredState) -> Vec<DeviceSyncManifestFile> {
             relative_path: file.relative_path.clone(),
             source_keys: file.source_keys.iter().cloned().collect(),
             size_bytes: file.size_bytes,
+            transcode: Some(transcode),
+            source: Some(file.source.clone()),
         })
         .collect()
+}
+
+/// Whether an existing copy must be fetched again: it was made with another
+/// format or bitrate, or the server's source file changed since. Copies from
+/// manifests that predate the fingerprint are trusted as current rather than
+/// replaced wholesale.
+fn copy_is_stale(
+    old: &DeviceSyncManifestFile,
+    desired: &DesiredFile,
+    transcode: DeviceSyncTranscode,
+) -> bool {
+    old.effective_transcode() != transcode
+        || old
+            .source
+            .as_ref()
+            .is_some_and(|source| source != &desired.source)
 }
 
 #[cfg(test)]
@@ -283,8 +395,11 @@ pub(super) fn build_sync_plan(
         fetched,
         deletion_ids,
         target_dir,
-        layout_mode,
-        playlist_path_mode,
+        SyncPlanOptions {
+            layout_mode,
+            playlist_path_mode,
+            transcode: DeviceSyncTranscode::default(),
+        },
         None,
     )
 }
@@ -293,10 +408,14 @@ pub(super) fn build_sync_plan_with_resume(
     fetched: &[FetchedDeviceSyncSource],
     deletion_ids: &[String],
     target_dir: &str,
-    layout_mode: DeviceSyncLayoutMode,
-    playlist_path_mode: DeviceSyncPlaylistPathMode,
+    options: SyncPlanOptions,
     resume_files: Option<&[DeviceSyncManifestFile]>,
 ) -> Result<SyncDeltaResult, String> {
+    let SyncPlanOptions {
+        layout_mode,
+        transcode,
+        ..
+    } = options;
     let root = Path::new(target_dir);
     let deletion_keys = deletion_ids.iter().cloned().collect::<HashSet<_>>();
     let all_source_keys = fetched
@@ -307,12 +426,7 @@ pub(super) fn build_sync_plan_with_resume(
         .difference(&deletion_keys)
         .cloned()
         .collect::<HashSet<_>>();
-    let desired = build_desired_state(
-        fetched,
-        &desired_source_keys,
-        layout_mode,
-        playlist_path_mode,
-    )?;
+    let desired = build_desired_state(fetched, &desired_source_keys, options)?;
 
     let previous_manifest = read_device_manifest(target_dir.to_string());
     if let (Some(manifest), Some(owner)) = (
@@ -334,16 +448,38 @@ pub(super) fn build_sync_plan_with_resume(
         .map(manifest_source_keys)
         .filter(|keys| !keys.is_empty())
         .unwrap_or_else(|| all_source_keys.clone());
+    let previous_layout_mode = manifest_layout_mode(previous_manifest.as_ref());
     let derived_old = build_desired_state(
         fetched,
         &previous_source_keys,
-        manifest_layout_mode(previous_manifest.as_ref()),
-        DeviceSyncPlaylistPathMode::PlaylistRelative,
+        SyncPlanOptions {
+            layout_mode: previous_layout_mode,
+            ..SyncPlanOptions::default()
+        },
     )?;
     let has_materialized_plan = previous_manifest.as_ref().is_some_and(|manifest| {
         manifest.get("files").is_some() && manifest.get("playlists").is_some()
     });
-    let derived_old_files = manifest_files(&derived_old);
+    let derived_old_files = manifest_files(&derived_old, DeviceSyncTranscode::default());
+    let previous_sources = fetched
+        .iter()
+        .map(|entry| (device_sync_source_key(&entry.source), &entry.source))
+        .filter(|(key, _)| previous_source_keys.contains(key))
+        .collect::<HashMap<_, _>>();
+    let previous_collision_sources = playlist_collision_source_keys(
+        &previous_sources
+            .values()
+            .map(|source| (*source).clone())
+            .collect::<Vec<_>>(),
+    );
+    let mut known_songs = HashMap::new();
+    for entry in fetched {
+        for track in &entry.tracks {
+            if let Some(id) = track.get("id").and_then(serde_json::Value::as_str) {
+                known_songs.insert(id, track);
+            }
+        }
+    }
     let expected_old_files = derived_old_files
         .iter()
         .map(|file| (portable_path_identity(&file.relative_path), file))
@@ -355,17 +491,23 @@ pub(super) fn build_sync_plan_with_resume(
             files
                 .into_iter()
                 .filter(|file| {
-                    let Some(expected) =
-                        expected_old_files.get(&portable_path_identity(&file.relative_path))
-                    else {
-                        return false;
-                    };
-                    file.track_id == expected.track_id
-                        && !file.source_keys.is_empty()
+                    let owned_by_previous_sources = !file.source_keys.is_empty()
                         && file
                             .source_keys
                             .iter()
-                            .all(|key| previous_source_keys.contains(key))
+                            .all(|key| previous_source_keys.contains(key));
+                    let derived_from_current_listing = expected_old_files
+                        .get(&portable_path_identity(&file.relative_path))
+                        .is_some_and(|expected| file.track_id == expected.track_id);
+                    owned_by_previous_sources
+                        && (derived_from_current_listing
+                            || authenticated_by_server_song(
+                                file,
+                                &known_songs,
+                                &previous_sources,
+                                &previous_collision_sources,
+                                previous_layout_mode,
+                            ))
                 })
                 .collect()
         })
@@ -494,6 +636,10 @@ pub(super) fn build_sync_plan_with_resume(
         }
     }
 
+    let old_files_by_identity = old_files
+        .iter()
+        .map(|file| (portable_path_identity(&file.relative_path), file))
+        .collect::<HashMap<_, _>>();
     let mut tracks = Vec::new();
     let mut add_bytes = 0_u64;
     for file in desired.files.values() {
@@ -503,6 +649,7 @@ pub(super) fn build_sync_plan_with_resume(
         if !planned_path_stays_within(root, &absolute).map_err(|error| error.to_string())? {
             return Err("DEVICE_SYNC_PLANNED_PATH_ESCAPES_ROOT".to_string());
         }
+        let mut overwrite = false;
         if absolute.exists() {
             if has_materialized_plan
                 && old_files_by_path
@@ -519,9 +666,23 @@ pub(super) fn build_sync_plan_with_resume(
                     file.relative_path
                 ));
             }
-            continue;
+            let stale = old_files_by_identity
+                .get(&portable_path_identity(&file.relative_path))
+                .is_some_and(|old| {
+                    old.track_id == file.track_id && copy_is_stale(old, file, transcode)
+                });
+            if !stale {
+                continue;
+            }
+            overwrite = true;
         }
         let mut track = file.track.clone();
+        if let Some(suffix) = transcode.target_suffix() {
+            inject_target_suffix(&mut track, suffix);
+        }
+        if overwrite {
+            inject_overwrite(&mut track);
+        }
         inject_playlist_context(
             &mut track,
             file.playlist_name.as_deref(),
@@ -539,7 +700,7 @@ pub(super) fn build_sync_plan_with_resume(
         .iter()
         .map(|file| portable_path_identity(&file.relative_path))
         .collect::<HashSet<_>>();
-    let mut desired_manifest_files = manifest_files(&desired);
+    let mut desired_manifest_files = manifest_files(&desired, transcode);
     desired_manifest_files.extend(retained_manifest_files(
         root,
         materialized_old_files.unwrap_or_default(),

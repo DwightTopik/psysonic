@@ -6,10 +6,13 @@ import {
 import CustomSelect from '@/ui/CustomSelect';
 import type { RemovableDrive } from '@/features/deviceSync/utils/deviceSyncHelpers';
 import { formatBytes } from '@/features/deviceSync/utils/deviceSyncHelpers';
-import type {
-  DeviceSyncLayoutMode,
-  DeviceSyncPlaylistPathMode,
-  DeviceSyncSource,
+import {
+  DEVICE_SYNC_TRANSCODE_BITRATES,
+  type DeviceSyncLayoutMode,
+  type DeviceSyncPlaylistPathMode,
+  type DeviceSyncSource,
+  type DeviceSyncTranscode,
+  type DeviceSyncTranscodeFormat,
 } from '@/features/deviceSync/store/deviceSyncStore';
 
 interface Props {
@@ -27,13 +30,23 @@ interface Props {
   playlistPathMode: DeviceSyncPlaylistPathMode;
   setLayoutMode: (mode: DeviceSyncLayoutMode) => void;
   setPlaylistPathMode: (mode: DeviceSyncPlaylistPathMode) => void;
+  transcode: DeviceSyncTranscode;
+  setTranscode: (transcode: DeviceSyncTranscode) => void;
   isRunning: boolean;
 }
+
+const TRANSCODE_FORMAT_LABEL_KEYS: Record<DeviceSyncTranscodeFormat, string> = {
+  original: 'deviceSync.transcodeOriginal',
+  mp3: 'deviceSync.transcodeMp3',
+  aac: 'deviceSync.transcodeAac',
+  opus: 'deviceSync.transcodeOpus',
+};
 
 export default function DeviceSyncHeader({
   targetDir, setTargetDir, sources, drives, drivesLoading, activeDrive,
   refreshDrives, scanDevice, handleChooseFolder, startMigrationPreview,
-  layoutMode, playlistPathMode, setLayoutMode, setPlaylistPathMode, isRunning,
+  layoutMode, playlistPathMode, setLayoutMode, setPlaylistPathMode,
+  transcode, setTranscode, isRunning,
 }: Props) {
   const { t } = useTranslation();
 
@@ -93,7 +106,42 @@ export default function DeviceSyncHeader({
                 />
               </label>
             )}
+            <label>
+              <span className="device-sync-label-inline">{t('deviceSync.transcodeFormat')}</span>
+              <CustomSelect
+                className="input device-sync-layout-select"
+                value={transcode.format}
+                onChange={value => setTranscode({ ...transcode, format: value as DeviceSyncTranscodeFormat })}
+                disabled={isRunning}
+                ariaLabel={t('deviceSync.transcodeFormat')}
+                options={(Object.keys(TRANSCODE_FORMAT_LABEL_KEYS) as DeviceSyncTranscodeFormat[]).map(format => ({
+                  value: format,
+                  label: t(TRANSCODE_FORMAT_LABEL_KEYS[format]),
+                }))}
+              />
+            </label>
+            {transcode.format !== 'original' && (
+              <label>
+                <span className="device-sync-label-inline">{t('deviceSync.transcodeBitrate')}</span>
+                <CustomSelect
+                  className="input device-sync-layout-select"
+                  value={String(transcode.maxBitRateKbps)}
+                  onChange={value => setTranscode({ ...transcode, maxBitRateKbps: Number(value) })}
+                  disabled={isRunning}
+                  ariaLabel={t('deviceSync.transcodeBitrate')}
+                  options={DEVICE_SYNC_TRANSCODE_BITRATES.map(kbps => ({
+                    value: String(kbps),
+                    label: kbps === 0
+                      ? t('deviceSync.transcodeBitrateServer')
+                      : t('deviceSync.transcodeBitrateValue', { kbps }),
+                  }))}
+                />
+              </label>
+            )}
           </div>
+          {transcode.format !== 'original' && (
+            <span className="device-sync-schema-hint">{t('deviceSync.transcodeHint')}</span>
+          )}
           {targetDir && sources.length > 0 && (
             <button
               className="btn btn-ghost device-sync-migrate-btn"

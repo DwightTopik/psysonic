@@ -20,13 +20,15 @@ pub(crate) mod plan;
 mod planner;
 
 pub(crate) use model::{
-    estimate_track_size_bytes, fetch_subsonic_songs, inject_flat_layout, inject_playlist_context,
-    subsonic_response_root, track_sync_info_from_subsonic_json,
+    estimate_track_size_bytes, fetch_subsonic_songs, inject_flat_layout, inject_overwrite,
+    inject_playlist_context, inject_target_suffix, subsonic_response_root,
+    track_sync_info_from_subsonic_json,
 };
 pub use model::{
     parse_subsonic_songs, DeviceSyncLayoutMode, DeviceSyncManifestFile, DeviceSyncManifestPlaylist,
-    DeviceSyncPlannedPlaylist, DeviceSyncPlaylistPathMode, DeviceSyncSourcePayload,
-    SubsonicAuthPayload, SyncDeltaResult,
+    DeviceSyncPlannedPlaylist, DeviceSyncPlaylistPathMode, DeviceSyncSourceFingerprint,
+    DeviceSyncSourcePayload, DeviceSyncTranscode, DeviceSyncTranscodeFormat, SubsonicAuthPayload,
+    SyncDeltaResult,
 };
 pub(crate) use plan::{
     activate_device_sync_plan, clear_device_sync_plan, normalized_manifest_files,
@@ -74,6 +76,7 @@ pub async fn calculate_sync_payload(
     layout_mode: DeviceSyncLayoutMode,
     playlist_path_mode: DeviceSyncPlaylistPathMode,
     expected_device_id: Option<String>,
+    transcode: Option<DeviceSyncTranscode>,
     app: tauri::AppHandle,
 ) -> Result<SyncDeltaResult, String> {
     let _device_sync_guard = super::device::device_sync_operation_guard().await;
@@ -91,6 +94,7 @@ pub async fn calculate_sync_payload(
         target_dir,
         layout_mode,
         playlist_path_mode,
+        transcode.unwrap_or_default().normalized(),
         device_id,
         expected_device_id,
         app,
@@ -254,7 +258,7 @@ pub async fn sync_batch_to_device(
                 return;
             }
 
-            let status = if dest_path.exists() {
+            let status = if dest_path.exists() && !track.overwrite {
                 s.fetch_add(1, Ordering::Relaxed);
                 "skipped"
             } else {

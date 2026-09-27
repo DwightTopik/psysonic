@@ -211,6 +211,26 @@ fn verify_plan(
     Ok(())
 }
 
+/// Records the size each file actually has on the device; the plan only
+/// carries estimates, which are far off for transcoded copies.
+fn files_with_device_sizes(
+    root: &Path,
+    files: &[DeviceSyncManifestFile],
+) -> Vec<DeviceSyncManifestFile> {
+    files
+        .iter()
+        .map(|file| {
+            let mut file = file.clone();
+            if let Some(metadata) = resolve_within_root(root, &file.relative_path)
+                .and_then(|path| std::fs::metadata(path).ok())
+            {
+                file.size_bytes = metadata.len();
+            }
+            file
+        })
+        .collect()
+}
+
 fn preflight_files_and_references(
     root: &Path,
     payload: &DeviceSyncFinalizePayload,
@@ -317,7 +337,10 @@ fn finalize_device_sync_with_validator(
             canonical_id_version: payload.canonical_id_version,
             layout_mode: Some(payload.layout_mode.clone()),
             playlist_path_mode: Some(payload.playlist_path_mode.clone()),
-            files: Some(serde_json::to_value(&payload.files).map_err(|error| error.to_string())?),
+            files: Some(
+                serde_json::to_value(files_with_device_sizes(root, &payload.files))
+                    .map_err(|error| error.to_string())?,
+            ),
             playlists: Some(
                 serde_json::to_value(&payload.manifest_playlists)
                     .map_err(|error| error.to_string())?,

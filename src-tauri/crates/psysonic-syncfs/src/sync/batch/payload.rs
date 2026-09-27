@@ -5,7 +5,7 @@ use tauri::Manager;
 use super::plan::{carry_active_plan_cleanup, prepare_device_sync_plan, read_device_sync_plan};
 use super::{
     fetch_subsonic_songs, subsonic_response_root, DeviceSyncLayoutMode, DeviceSyncPlaylistPathMode,
-    DeviceSyncSourcePayload, SubsonicAuthPayload, SyncDeltaResult,
+    DeviceSyncSourcePayload, DeviceSyncTranscode, SubsonicAuthPayload, SyncDeltaResult,
 };
 
 /// `None` marks a source that is on its way off the device: it contributes no
@@ -14,7 +14,7 @@ type SourceFetchHandle = (
     DeviceSyncSourcePayload,
     Option<tokio::task::JoinHandle<Result<Vec<serde_json::Value>, String>>>,
 );
-use super::planner::{build_sync_plan_with_resume, FetchedDeviceSyncSource};
+use super::planner::{build_sync_plan_with_resume, FetchedDeviceSyncSource, SyncPlanOptions};
 use crate::file_transfer::{apply_server_http_get, subsonic_http_client};
 use crate::sync::device::{get_removable_drives, playlist_collision_key, validate_device_identity};
 
@@ -81,6 +81,7 @@ pub(super) async fn calculate_sync_payload_impl(
     target_dir: String,
     layout_mode: DeviceSyncLayoutMode,
     playlist_path_mode: DeviceSyncPlaylistPathMode,
+    transcode: DeviceSyncTranscode,
     device_id: String,
     expected_device_id: Option<String>,
     app: tauri::AppHandle,
@@ -213,8 +214,11 @@ pub(super) async fn calculate_sync_payload_impl(
         &fetched,
         &deletion_ids,
         &target_dir,
-        layout_mode,
-        playlist_path_mode,
+        SyncPlanOptions {
+            layout_mode,
+            playlist_path_mode,
+            transcode,
+        },
         existing_active
             .as_ref()
             .map(|plan| plan.manifest_files.as_slice()),

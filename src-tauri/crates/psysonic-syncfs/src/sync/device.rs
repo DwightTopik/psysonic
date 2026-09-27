@@ -349,6 +349,10 @@ pub struct TrackSyncInfo {
     /// source it came from (see `build_track_path`).
     #[serde(default, rename = "flatLayout")]
     pub flat_layout: bool,
+    /// Replace an existing copy at the same path (new transcode profile or a
+    /// source file that changed on the server) instead of skipping it.
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 /// Summary returned by `sync_batch_to_device` after all tracks are processed.

@@ -1,10 +1,11 @@
 use super::super::payload::device_sync_source_key;
 use super::super::planner::{
-    build_sync_plan, build_sync_plan_with_resume, FetchedDeviceSyncSource,
+    build_sync_plan, build_sync_plan_with_resume, FetchedDeviceSyncSource, SyncPlanOptions,
 };
 use super::super::{
     DeviceSyncLayoutMode, DeviceSyncManifestFile, DeviceSyncManifestPlaylist,
-    DeviceSyncPlaylistPathMode, DeviceSyncSourcePayload,
+    DeviceSyncPlaylistPathMode, DeviceSyncSourceFingerprint, DeviceSyncSourcePayload,
+    DeviceSyncTranscode, DeviceSyncTranscodeFormat, SyncDeltaResult,
 };
 
 fn source(source_type: &str, id: &str, name: &str) -> DeviceSyncSourcePayload {
@@ -153,6 +154,8 @@ fn shared_file_survives_removing_one_of_its_sources() {
             relative_path: relative_path.to_string(),
             source_keys: vec![album_key.clone(), playlist_key.clone()],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[DeviceSyncManifestPlaylist {
             source_key: playlist_key.clone(),
@@ -204,6 +207,8 @@ fn shared_file_survives_playlist_membership_change() {
             relative_path: relative_path.to_string(),
             source_keys: vec![album_key.clone(), playlist_key],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -249,6 +254,8 @@ fn self_contained_to_shared_migration_defers_the_only_existing_copy() {
             relative_path: old_path.to_string(),
             source_keys: vec![playlist_key.clone()],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[DeviceSyncManifestPlaylist {
             source_key: playlist_key,
@@ -298,6 +305,8 @@ fn active_plan_resumes_a_downloaded_file_not_yet_in_the_manifest() {
             relative_path: old_path.to_string(),
             source_keys: vec![playlist_key.clone()],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -310,14 +319,19 @@ fn active_plan_resumes_a_downloaded_file_not_yet_in_the_manifest() {
         relative_path: new_path.to_string(),
         source_keys: vec![playlist_key],
         size_bytes: 100,
+        transcode: None,
+        source: None,
     }];
 
     let plan = build_sync_plan_with_resume(
         &fetched,
         &[],
         device.path().to_str().unwrap(),
-        DeviceSyncLayoutMode::SharedAlbumTree,
-        DeviceSyncPlaylistPathMode::DeviceRooted,
+        SyncPlanOptions {
+            layout_mode: DeviceSyncLayoutMode::SharedAlbumTree,
+            playlist_path_mode: DeviceSyncPlaylistPathMode::DeviceRooted,
+            ..SyncPlanOptions::default()
+        },
         Some(&resume_files),
     )
     .unwrap();
@@ -349,6 +363,8 @@ fn removing_the_final_playlist_deletes_its_track_and_m3u() {
             relative_path: track_path.to_string(),
             source_keys: vec![playlist_key.clone()],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[DeviceSyncManifestPlaylist {
             source_key: playlist_key.clone(),
@@ -445,6 +461,8 @@ fn manifest_cannot_nominate_an_unrelated_device_file_for_deletion() {
             relative_path: unrelated_path.to_string(),
             source_keys: vec![album_key.clone()],
             size_bytes: 7,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -483,6 +501,8 @@ fn v4_manifest_does_not_delete_a_track_that_can_no_longer_be_derived() {
             relative_path: old_path.to_string(),
             source_keys: vec![album_key],
             size_bytes: 3,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -522,6 +542,8 @@ fn v4_manifest_drops_missing_unverifiable_ownership_from_the_replacement() {
             relative_path: old_path.to_string(),
             source_keys: vec![album_key],
             size_bytes: 3,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -560,6 +582,8 @@ fn planner_rejects_a_different_track_at_an_owned_existing_path() {
             relative_path: path.to_string(),
             source_keys: vec![album_key],
             size_bytes: 3,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -747,6 +771,8 @@ fn switching_to_flat_replaces_the_album_tree_copy() {
             relative_path: tree_path.to_string(),
             source_keys: vec![device_sync_source_key(&album)],
             size_bytes: 100,
+            transcode: None,
+            source: None,
         }],
         &[],
     );
@@ -771,4 +797,253 @@ fn switching_to_flat_replaces_the_album_tree_copy() {
     assert!(plan.deferred_delete_paths[0]
         .replace('\\', "/")
         .ends_with(tree_path));
+}
+
+fn mp3(max_bit_rate_kbps: u32) -> DeviceSyncTranscode {
+    DeviceSyncTranscode {
+        format: DeviceSyncTranscodeFormat::Mp3,
+        max_bit_rate_kbps,
+    }
+}
+
+fn flac_fingerprint(size: u64) -> Option<DeviceSyncSourceFingerprint> {
+    Some(DeviceSyncSourceFingerprint {
+        size: Some(size),
+        suffix: Some("flac".to_string()),
+        bit_rate: None,
+    })
+}
+
+fn manifest_file(
+    track_id: &str,
+    relative_path: &str,
+    source_key: &str,
+    transcode: Option<DeviceSyncTranscode>,
+    source: Option<DeviceSyncSourceFingerprint>,
+) -> DeviceSyncManifestFile {
+    DeviceSyncManifestFile {
+        track_id: track_id.to_string(),
+        relative_path: relative_path.to_string(),
+        source_keys: vec![source_key.to_string()],
+        size_bytes: 100,
+        transcode,
+        source,
+    }
+}
+
+fn plan_with(
+    device: &tempfile::TempDir,
+    fetched: &[FetchedDeviceSyncSource],
+    options: SyncPlanOptions,
+) -> SyncDeltaResult {
+    build_sync_plan_with_resume(fetched, &[], device.path().to_str().unwrap(), options, None)
+        .unwrap()
+}
+
+fn shared_tree(transcode: DeviceSyncTranscode) -> SyncPlanOptions {
+    SyncPlanOptions {
+        layout_mode: DeviceSyncLayoutMode::SharedAlbumTree,
+        playlist_path_mode: DeviceSyncPlaylistPathMode::PlaylistRelative,
+        transcode,
+    }
+}
+
+fn write_device_file(device: &tempfile::TempDir, relative_path: &str) {
+    let path = device.path().join(relative_path);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, b"audio").unwrap();
+}
+
+#[test]
+fn transcoding_plans_the_target_suffix_and_records_the_profile() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let mut song = track("track-1", "Song");
+    song["duration"] = serde_json::json!(100);
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![song],
+    }];
+
+    let plan = plan_with(&device, &fetched, shared_tree(mp3(192)));
+
+    assert_eq!(plan.add_count, 1);
+    assert_eq!(plan.add_bytes, 100 * 192 * 1000 / 8);
+    assert_eq!(plan.tracks[0]["suffix"], "mp3");
+    assert_eq!(plan.tracks[0]["_sourceSuffix"], "flac");
+    assert!(plan.tracks[0].get("_overwrite").is_none());
+    assert_eq!(
+        plan.manifest_files[0].relative_path,
+        "Album Artist/Album/01 - Song.mp3"
+    );
+    assert_eq!(plan.manifest_files[0].transcode, Some(mp3(192)));
+    assert_eq!(plan.manifest_files[0].source, flac_fingerprint(100));
+}
+
+#[test]
+fn an_unchanged_transcoded_copy_is_kept() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let album_key = device_sync_source_key(&album);
+    let path = "Album Artist/Album/01 - Song.mp3";
+    write_device_file(&device, path);
+    write_manifest(
+        &device,
+        std::slice::from_ref(&album),
+        DeviceSyncLayoutMode::SharedAlbumTree,
+        &[manifest_file(
+            "track-1",
+            path,
+            &album_key,
+            Some(mp3(320)),
+            flac_fingerprint(100),
+        )],
+        &[],
+    );
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![track("track-1", "Song")],
+    }];
+
+    let plan = plan_with(&device, &fetched, shared_tree(mp3(320)));
+
+    assert_eq!(plan.add_count, 0);
+    assert_eq!(plan.del_count, 0);
+}
+
+#[test]
+fn a_new_bitrate_overwrites_the_copy_in_place() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let album_key = device_sync_source_key(&album);
+    let path = "Album Artist/Album/01 - Song.mp3";
+    write_device_file(&device, path);
+    write_manifest(
+        &device,
+        std::slice::from_ref(&album),
+        DeviceSyncLayoutMode::SharedAlbumTree,
+        &[manifest_file(
+            "track-1",
+            path,
+            &album_key,
+            Some(mp3(320)),
+            flac_fingerprint(100),
+        )],
+        &[],
+    );
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![track("track-1", "Song")],
+    }];
+
+    let plan = plan_with(&device, &fetched, shared_tree(mp3(192)));
+
+    assert_eq!(plan.add_count, 1);
+    assert_eq!(plan.tracks[0]["_overwrite"], true);
+    assert_eq!(plan.del_count, 0);
+    assert_eq!(plan.manifest_files[0].transcode, Some(mp3(192)));
+}
+
+#[test]
+fn a_source_file_replaced_on_the_server_is_fetched_again() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let album_key = device_sync_source_key(&album);
+    let path = "Album Artist/Album/01 - Song.flac";
+    write_device_file(&device, path);
+    write_manifest(
+        &device,
+        std::slice::from_ref(&album),
+        DeviceSyncLayoutMode::SharedAlbumTree,
+        &[manifest_file(
+            "track-1",
+            path,
+            &album_key,
+            Some(DeviceSyncTranscode::default()),
+            flac_fingerprint(50),
+        )],
+        &[],
+    );
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![track("track-1", "Song")],
+    }];
+
+    let plan = plan_with(
+        &device,
+        &fetched,
+        shared_tree(DeviceSyncTranscode::default()),
+    );
+
+    assert_eq!(plan.add_count, 1);
+    assert_eq!(plan.tracks[0]["_overwrite"], true);
+    assert_eq!(plan.manifest_files[0].source, flac_fingerprint(100));
+}
+
+#[test]
+fn copies_without_a_recorded_fingerprint_are_not_refreshed() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let album_key = device_sync_source_key(&album);
+    let path = "Album Artist/Album/01 - Song.flac";
+    write_device_file(&device, path);
+    write_manifest(
+        &device,
+        std::slice::from_ref(&album),
+        DeviceSyncLayoutMode::SharedAlbumTree,
+        &[manifest_file("track-1", path, &album_key, None, None)],
+        &[],
+    );
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![track("track-1", "Song")],
+    }];
+
+    let plan = plan_with(
+        &device,
+        &fetched,
+        shared_tree(DeviceSyncTranscode::default()),
+    );
+
+    assert_eq!(plan.add_count, 0);
+    assert_eq!(plan.manifest_files[0].source, flac_fingerprint(100));
+}
+
+#[test]
+fn switching_back_to_originals_replaces_the_transcoded_copy() {
+    let device = tempfile::tempdir().unwrap();
+    let album = source("album", "album-1", "Album");
+    let album_key = device_sync_source_key(&album);
+    let mp3_path = "Album Artist/Album/01 - Song.mp3";
+    write_device_file(&device, mp3_path);
+    write_manifest(
+        &device,
+        std::slice::from_ref(&album),
+        DeviceSyncLayoutMode::SharedAlbumTree,
+        &[manifest_file(
+            "track-1",
+            mp3_path,
+            &album_key,
+            Some(mp3(320)),
+            flac_fingerprint(100),
+        )],
+        &[],
+    );
+    let fetched = vec![FetchedDeviceSyncSource {
+        source: album,
+        tracks: vec![track("track-1", "Song")],
+    }];
+
+    let plan = plan_with(
+        &device,
+        &fetched,
+        shared_tree(DeviceSyncTranscode::default()),
+    );
+
+    assert_eq!(plan.add_count, 1);
+    assert_eq!(plan.tracks[0]["suffix"], "flac");
+    assert_eq!(
+        plan.deferred_delete_paths,
+        vec![device.path().join(mp3_path).to_string_lossy().to_string()]
+    );
 }
