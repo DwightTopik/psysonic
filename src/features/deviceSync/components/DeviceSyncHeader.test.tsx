@@ -24,6 +24,7 @@ function renderHeader(playlistPathMode: DeviceSyncPlaylistPathMode) {
       setPlaylistPathMode={vi.fn()}
       transcode={{ format: 'original', maxBitRateKbps: 320 }}
       setTranscode={vi.fn()}
+      targetIsLocal={false}
       isRunning={false}
     />,
   );
