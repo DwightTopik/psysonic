@@ -23,6 +23,8 @@ export const deviceSync = {
   playlistPathStyle: 'M3U-padstijl',
   playlistPathRelative: 'Relatief aan afspeellijst',
   playlistPathRooted: 'Vanaf apparaatroot (/Artiest/Album/…)',
+  playlistPathAbsolute: 'Absoluut (volledige bestandspaden)',
+  playlistPathAbsoluteHint: 'Absolute paden bevatten de stationsletter of het koppelpunt van deze computer, dus de afspeellijsten werken alleen zolang het apparaat daar onder hetzelfde pad verschijnt.',
   transcodeFormat: 'Formaat',
   transcodeOriginal: 'Originele bestanden',
   transcodeMp3: 'MP3',

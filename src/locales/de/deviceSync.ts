@@ -23,6 +23,8 @@ export const deviceSync = {
   playlistPathStyle: 'M3U-Pfadformat',
   playlistPathRelative: 'Relativ zur Playlist',
   playlistPathRooted: 'Vom Gerätestamm (/Künstler/Album/…)',
+  playlistPathAbsolute: 'Absolut (vollständige Dateipfade)',
+  playlistPathAbsoluteHint: 'Absolute Pfade enthalten den Laufwerksbuchstaben bzw. Einhängepunkt dieses Computers. Die Playlists funktionieren daher nur, solange das Gerät dort unter demselben Pfad erscheint.',
   transcodeFormat: 'Format',
   transcodeOriginal: 'Originaldateien',
   transcodeMp3: 'MP3',

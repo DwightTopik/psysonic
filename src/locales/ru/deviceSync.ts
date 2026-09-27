@@ -23,6 +23,8 @@ export const deviceSync = {
   playlistPathStyle: 'Стиль путей M3U',
   playlistPathRelative: 'Относительно плейлиста',
   playlistPathRooted: 'От корня устройства (/Исполнитель/Альбом/…)',
+  playlistPathAbsolute: 'Абсолютные (полные пути)',
+  playlistPathAbsoluteHint: 'Абсолютные пути содержат букву диска или точку монтирования этого компьютера, поэтому плейлисты работают, только пока устройство подключено по тому же пути.',
   transcodeFormat: 'Формат',
   transcodeOriginal: 'Исходные файлы',
   transcodeMp3: 'MP3',

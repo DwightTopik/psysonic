@@ -23,6 +23,8 @@ export const deviceSync = {
   playlistPathStyle: 'Styl ścieżek M3U',
   playlistPathRelative: 'Względem playlisty',
   playlistPathRooted: 'Od katalogu głównego urządzenia (/Wykonawca/Album/…)',
+  playlistPathAbsolute: 'Bezwzględne (pełne ścieżki plików)',
+  playlistPathAbsoluteHint: 'Ścieżki bezwzględne zawierają literę dysku lub punkt montowania tego komputera, więc playlisty działają tylko wtedy, gdy urządzenie pojawia się pod tą samą ścieżką.',
   transcodeFormat: 'Format',
   transcodeOriginal: 'Pliki oryginalne',
   transcodeMp3: 'MP3',
