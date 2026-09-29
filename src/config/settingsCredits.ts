@@ -622,6 +622,13 @@ const CONTRIBUTOR_ENTRIES = [
       'Device Sync — sync to a local folder (PR #1671)',
     ],
   },
+  {
+    github: 'Puppies-On-Acid',
+    since: '1.56.0',
+    contributions: [
+      'Browse albums by file mood tags (PR #1675)',
+    ],
+  },
 ] as const;
 
 // PR number of a contributor's first listed contribution, used as the

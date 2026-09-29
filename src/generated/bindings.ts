@@ -9,6 +9,7 @@ export const commands = {
 	libraryGetCatalogYearBounds: (serverId: string) => typedError<CatalogYearBoundsDto, string>(__TAURI_INVOKE("library_get_catalog_year_bounds", { serverId })),
 	/**  Distinct album counts per track genre — same grouping as genre album browse. */
 	libraryGetGenreAlbumCounts: (serverId: string, libraryScope: string | null, libraryScopes: string[] | null) => typedError<GenreAlbumCountDto[], string>(__TAURI_INVOKE("library_get_genre_album_counts", { serverId, libraryScope, libraryScopes })),
+	libraryGetMoodAlbumCounts: (serverId: string, libraryScope: string | null, libraryScopes: string[] | null) => typedError<MoodAlbumCountDto[], string>(__TAURI_INVOKE("library_get_mood_album_counts", { serverId, libraryScope, libraryScopes })),
 	/**
 	 *  Align `album.starred_at` with server favorites: UPDATE existing rows only
 	 *  (no INSERT / stub rows). Clears local stars absent from `starred_albums`.
@@ -70,6 +71,8 @@ export const commands = {
 	libraryGetOfflinePath: (serverId: string, trackId: string) => typedError<OfflinePathDto, string>(__TAURI_INVOKE("library_get_offline_path", { serverId, trackId })),
 	libraryGenreTagsInspect: () => typedError<GenreTagsInspectDto, string>(__TAURI_INVOKE("library_genre_tags_inspect")),
 	libraryGenreTagsRun: () => typedError<null, string>(__TAURI_INVOKE("library_genre_tags_run")),
+	libraryFileMoodTagsInspect: () => typedError<MoodTagsInspectDto, string>(__TAURI_INVOKE("library_file_mood_tags_inspect")),
+	libraryFileMoodTagsRun: () => typedError<null, string>(__TAURI_INVOKE("library_file_mood_tags_run")),
 	/**  Ensure precomputed cluster identity keys are current without blocking Tauri's main thread. */
 	libraryClusterRebuild: (serverId: string | null) => typedError<number, string>(__TAURI_INVOKE("library_cluster_rebuild", { serverId })),
 	libraryResolveEntitySources: (request: LibraryResolveEntitySourcesRequest) => typedError<LibraryEntitySourceDto[], string>(__TAURI_INVOKE("library_resolve_entity_sources", { request })),
@@ -1909,6 +1912,19 @@ export type MigrationServerSnapshotDto = {
 	serverId: string,
 	phase: MigrationPhase,
 	error: string | null,
+};
+
+/**  Per-file-mood album/track totals from the local mood index. */
+export type MoodAlbumCountDto = {
+	value: string,
+	albumCount: number,
+	songCount: number,
+};
+
+export type MoodTagsInspectDto = {
+	needed: boolean,
+	totalTracks: number,
+	doneTracks: number,
 };
 
 export type NavidromeFilesystemMigrationDto = {

@@ -22,6 +22,7 @@ export const sidebar = {
   cancelDownload: 'Anulează descărcarea',
   offlineLibrary: 'Librărie Offline',
   genres: 'Genuri',
+  moods: 'Stări de spirit',
   tracks: 'Piese',
   playlists: 'Playlisturi',
   shared: 'ND Distribuiri',
