@@ -23,7 +23,7 @@ jobs:
         with:
           ref: feature/animated-covers
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.SYNC_PAT }}
 
       - name: Configure Git identity
         run: |
@@ -55,8 +55,8 @@ jobs:
           git push origin HEAD:refs/heads/feature/animated-covers \
             --force-with-lease=refs/heads/feature/animated-covers:"$remote_sha"
 
-          # GITHUB_TOKEN pushes do not emit a second workflow run, so dispatch
-          # the single-build artifact/release pipeline explicitly after push.
+          # Dispatch the single-build artifact/release pipeline only after the
+          # PAT-authenticated push has completed successfully.
           gh workflow run build-windows.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref feature/animated-covers \
