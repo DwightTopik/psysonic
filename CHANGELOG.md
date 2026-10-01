@@ -227,6 +227,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Pressing Play after a long pause could leave playback silent, as reported on Windows 10. Resume now restores the saved position before starting audio, including when the output device was released while idle.
 * If recovery fails, Psysonic retries once, then stays paused with the saved position instead of silently restarting the track from the beginning. Pause or Stop during loading cancels the pending resume.
 
+### Screen readers announce notifications
+
+**By [@Psychotoxical](https://github.com/Psychotoxical), PR [#1708](https://github.com/Psysonic/psysonic/pull/1708)**
+
+* The short notices at the bottom of the window, such as confirmations, warnings and errors, were never read out by screen readers. They are now announced: notices politely, errors right away.
+
 ## [1.55.0]
 
 ## Added
