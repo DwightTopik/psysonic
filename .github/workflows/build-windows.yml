@@ -8,9 +8,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches:
-      - feature/animated-covers
 
 permissions:
   contents: write
