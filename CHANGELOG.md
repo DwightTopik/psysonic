@@ -275,6 +275,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Seeking in a song that was reached via an automatic gapless transition previously timed out waiting for the predecessor track's streaming seek coordinator, triggering an unnecessary full-track reload that caused a buffering stall and reset the visual playhead to 0:00.
 * The stale streaming seek handle is now cleared on gapless advance, allowing seeks in preloaded successor tracks to execute immediately without buffering delays or UI desync.
 
+### Navidrome upgrades no longer get stuck on duplicate local downloads
+
+**By [@cucadmuh](https://github.com/cucadmuh), reported by Toast on Discord, PR [#1716](https://github.com/Psysonic/psysonic/pull/1716)**
+
+* Upgrading Navidrome could leave Psysonic stuck on “Migration Failed — Local playback collision” when the same track had local download records under both an older server profile ID and the server address. Migration now combines those records without deleting either downloaded file and preserves their album and playlist pins.
+* The original local download records are kept in a recovery snapshot before migration changes them. Toast confirmed normal operation with the test AppImage.
+
 ### The Flatpak shows its icon in the taskbar
 
 **By [@Psychotoxical](https://github.com/Psychotoxical), reported by Asra on Discord, PR [#1718](https://github.com/Psysonic/psysonic/pull/1718)**
